@@ -21,15 +21,53 @@
  *                                                                         *
  ***************************************************************************/
 """
-from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt
+from qgis.core import Qgis, QgsCoordinateReferenceSystem, QgsProject, QgsRasterLayer, QgsCoordinateTransform, QgsVectorLayer
+from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt, QDate
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction
+from qgis.PyQt.QtWidgets import QAction, QProgressBar, QApplication, QFileDialog
 # Initialize Qt resources from file resources.py
 from .resources import *
+
+from pathlib import Path
+
+
+import os
 
 # Import the code for the DockWidget
 from .sample_extractor_dockwidget import SampleExtractorDockWidget
 import os.path
+
+import pystac_client
+
+import json
+import urllib
+from datetime import datetime, timedelta
+
+import geopandas as gpd
+import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import pystac_client
+import rasterio
+import requests
+import rioxarray
+import shapely
+import xarray as xr
+from rasterio.features import shapes
+from scipy.cluster.hierarchy import dendrogram, fcluster, linkage
+from shapely import to_wkt, wkt
+from shapely.geometry import MultiPolygon, Point, shape
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+
+from .helpers.simplecube import *
+from .helpers.bsas import *
+from .helpers.silhouette import *
+from .helpers.som import *
+
+from datetime import datetime, timedelta
+from .config import Config
 
 
 class SampleExtractor:
@@ -208,6 +246,561 @@ class SampleExtractor:
 
     #--------------------------------------------------------------------------
 
+    def mkdir_cache(self):
+        project_path = QgsProject.instance().homePath()
+        path = os.path.join(project_path, 'sample_extractor_cache')
+        Path(path).mkdir(exist_ok = True)
+
+    def getCanvasExtent(self):
+        canvas = self.iface.mapCanvas()
+        transform = QgsCoordinateTransform(
+            canvas.mapSettings().destinationCrs(),
+            QgsCoordinateReferenceSystem("EPSG:4326"),
+            QgsProject.instance()
+        )
+        extent = canvas.extent()
+        extent_4326 = transform.transformBoundingBox(extent)
+        return [
+            extent_4326.xMinimum(),
+            extent_4326.yMinimum(),
+            extent_4326.xMaximum(),
+            extent_4326.yMaximum()
+        ]
+
+    def count_days(self, date, days_ = 7, sub = False):
+        start_date = datetime(
+            int(date[:4]),
+            int(date[5:7]),
+            int(date[8:])
+        )
+        if sub:
+            end_date = start_date - timedelta(days=days_)
+        else:
+            end_date = start_date + timedelta(days=days_)
+        end_date = end_date.strftime("%Y-%m-%d")
+        return end_date
+
+    def listCubes(self):
+        self.service = pystac_client.Client.open(Config.STAC_HOST)
+        collections = {}
+        for coll in self.service.get_collections():
+            collections[coll.title] = coll.id
+        return dict(sorted(collections.items(), key=lambda item: item[0].lower()))
+
+    def loadAttributes(self):
+        cube_id = self.cubes[self.dockwidget.cube_selections.currentText()]
+        collection = self.service.get_collection(cube_id)
+
+        start_date, end_date = collection.extent.temporal.intervals[0]
+        q_start = QDate(start_date.year, start_date.month, start_date.day)
+        q_end = QDate(end_date.year, end_date.month, end_date.day)
+        self.dockwidget.date_selection.setMinimumDate(q_start)
+        self.dockwidget.date_selection.setMaximumDate(q_end)
+        self.dockwidget.date_selection.setDate(q_end)
+        self.selected_date = self.getSelectedDate()
+
+        self.bands_dict = {}
+        item_assets = collection.to_dict()['item_assets']
+        for id in list(item_assets.keys()):
+            self.bands_dict[item_assets[id]['title']] = id
+        self.dockwidget.bands_selections.clear()
+        self.dockwidget.bands_selections.addItems(list(self.bands_dict.keys()))
+        self.dockwidget.bands_selections.setCurrentIndex(0)
+        self.dockwidget.selected_bands_view.setDisabled(True)
+        self.dockwidget.add_bands.clicked.connect(self.addBand)
+        self.dockwidget.clear_selected_bands.clicked.connect(self.clearBands)
+        self.selected_bands = []
+
+    def getSelectedDate(self):
+        return self.dockwidget.date_selection.date().toString("yyyy-MM-dd")
+
+    def updateBandsView(self):
+        self.selected_bands = list(set(self.selected_bands))
+        self.dockwidget.selected_bands_view.setText((", ").join(self.selected_bands))
+
+    def addBand(self):
+        self.selected_bands.append(self.dockwidget.bands_selections.currentText())
+        self.updateBandsView()
+
+    def clearBands(self):
+        self.selected_bands = []
+        self.updateBandsView()
+
+    def getSelectedBands(self):
+        return [ self.bands_dict[band_name] for band_name in self.selected_bands ]
+
+    def initCubesSettings(self):
+        self.cubes = self.listCubes()
+        self.dockwidget.cube_selections.clear()
+        self.dockwidget.cube_selections.addItems(list(self.cubes.keys()))
+        self.dockwidget.cube_selections.setCurrentIndex(0)
+        self.dockwidget.cube_selections.currentIndexChanged.connect(self.loadAttributes)
+        self.loadAttributes()
+        self.enableCubeSettings()
+        self.disableSOMSettings()
+        self.disableClusteringSettings()
+        self.disableGetClustersSettings()
+        self.disableSamplesExtractor()
+
+    def searchSimpleCube(self):
+        self.disableCubeSettings()
+        progress = QProgressBar()
+        progress.setMinimum(0)
+        progress.setMaximum(0)
+        message = self.iface.messageBar().createMessage("Loading cube data...")
+        message.layout().addWidget(progress)
+        self.iface.messageBar().pushWidget(message, Qgis.Info)
+        self.cube_id = self.cubes[self.dockwidget.cube_selections.currentText()]
+        self.bbox = self.getCanvasExtent()
+        self.composition = self.getSelectedBands()
+        self.date = self.getSelectedDate()
+        self.mkdir_cache()
+        project_path = QgsProject.instance().homePath()
+        self.cube = simple_cube_download(
+            stac_url   = Config.STAC_HOST,
+            data_dir   = os.path.join(project_path, "bdc_cache"),
+            collection = self.cube_id,
+            start_date = self.count_days(self.date, 8, sub=True),
+            end_date   = self.date,
+            bbox       = ",".join(map(str, self.bbox)),
+            bands      = self.composition
+        )
+        self.cube_file_name = f"{self.cube_id}_{('_').join(self.composition)}_{self.date}"
+        for var in self.cube.data_vars:
+            QApplication.processEvents()
+            raster = self.cube[var].isel(time=0, band=0)
+            output_path = os.path.join(project_path, 'sample_extractor_cache', f"{self.cube_file_name}_{var}.tif")
+            if raster.rio.crs is None:
+                raster = raster.rio.write_crs("EPSG:4326", inplace=True)
+            raster.rio.to_raster(output_path)
+            layer = QgsRasterLayer(output_path, f"{self.cube_file_name}_{var}")
+            if layer.isValid():
+                QgsProject.instance().addMapLayer(layer)
+            else:
+                self.iface.messageBar().pushWarning("Raster Error", f"Failed to load layer: {var}")
+        # stack das bandas → (y, x, features)
+        self.stacked = xr.concat([self.cube[var].isel(time=0, band=0) for var in list(self.cube.data_vars)], dim="feature")
+        self.stacked = self.stacked.transpose("y", "x", "feature")
+        # transformar em (n_pixels, n_features) e normalizar
+        self.X = self.stacked.values.reshape(-1, len(self.composition))
+        norms = np.linalg.norm(self.X, axis=1, keepdims=True)
+        self.X = self.X / (norms + 1e-8)
+        self.iface.messageBar().clearWidgets()
+        self.initSOMSettings()
+
+    def disconectCubeSettingsButton(self):
+        try:
+           self.dockwidget.search_crop_image.clicked.disconnect()
+        except TypeError:
+            pass
+
+    def enableCubeSettings(self):
+        self.dockwidget.cube_settings.setEnabled(True)
+        self.dockwidget.search_crop_image.setText("Search Image")
+        self.disconectCubeSettingsButton()
+        self.dockwidget.search_crop_image.clicked.connect(self.searchSimpleCube)
+
+    def disableCubeSettings(self):
+        self.dockwidget.cube_settings.setEnabled(False)
+        self.dockwidget.search_crop_image.setText("Edit source image")
+        self.disconectCubeSettingsButton()
+        self.dockwidget.search_crop_image.clicked.connect(self.initCubesSettings)
+
+    def initSOMSettings(self):
+        self.dockwidget.grid_x.setRange(5, 1000)
+        self.dockwidget.grid_y.setRange(5, 1000)
+        self.dockwidget.epochs.setRange(50, 1000)
+        self.dockwidget.eta.setRange(0.1, 1.0)
+        n = self.X.shape[0]
+        grid_xy = int(np.sqrt(5 * np.sqrt(n)) - 1)
+        self.dockwidget.grid_x.setValue(grid_xy)
+        self.dockwidget.grid_y.setValue(grid_xy)
+        self.enableSOMSettings()
+        self.disableCubeSettings()
+        self.disableClusteringSettings()
+        self.disableGetClustersSettings()
+        self.disableSamplesExtractor()
+
+    def plot_som_neurons(self, som):
+        rows, cols = som.grid_dimensions
+        fig, axes = plt.subplots(rows, cols, figsize=(10, 10))
+        for i in range(rows):
+            for j in range(cols):
+                ax = axes[i, j]
+                # pegar pesos do neurônio
+                w = som.neurons[i, j].weights.flatten()
+                w = (w - w.min()) / (w.max() - w.min() + 1e-8)
+                mean_val = w.mean()
+                color = plt.cm.viridis(mean_val)
+                ax.set_facecolor(color)
+                # deixar visual limpo
+                ax.set_xticks([])
+                ax.set_yticks([])
+                # opcional: limites fixos (melhora comparação)
+                ax.plot(np.linspace(0,1,len(w)), w)
+                ax.set_xlim(0,1)
+                ax.set_ylim(0,1)
+        plt.tight_layout()
+        plt.show()
+
+    def SOM(self):
+        X = self.X
+        self.som = SOMNetwork(
+            grid_dimensions = (self.dockwidget.grid_x.value(), self.dockwidget.grid_y.value()),
+            input_dimension = len(self.composition)
+        )
+        def gaussian_neighbor(xw, yw, x, y, sigma):
+            return np.exp(-((x-xw)**2 + (y-yw)**2) / (2*sigma**2))
+        sample_size = min(int(len(X) * 0.1), 5000)  # 10% limitado a 10 mil
+        idx = np.random.choice(len(X), size=sample_size, replace=False)
+        X_sample = X[idx]
+        # treinamento
+        for epoch in range(self.dockwidget.epochs.value()):
+            stride = max(1, len(self.X) // sample_size)
+            X_sample = self.X[::stride]
+            for x in X_sample:
+                self.som.organize(
+                    x.reshape(-1,1),
+                    eta = self.dockwidget.eta.value(),
+                    neighbor_fcn = gaussian_neighbor,
+                    sigma = 2
+                )
+        self.plot_som_neurons(self.som)
+        # extrair pesos
+        self.weights = []
+        self.positions = []
+        for i in range(self.som.grid_dimensions[0]):
+            for j in range(self.som.grid_dimensions[1]):
+                self.weights.append(self.som.neurons[i,j].weights.flatten())
+                self.positions.append((i, j))
+        self.weights = np.array(self.weights)
+        self.disableSOMSettings()
+        self.initClusteringSettings()
+
+    def disconectSOMButton(self):
+        try:
+           self.dockwidget.plot_som_map.clicked.disconnect()
+        except TypeError:
+            pass
+
+    def enableSOMSettings(self):
+        self.dockwidget.som_settings.setEnabled(True)
+        self.dockwidget.plot_som_map.setText("SOM map")
+        self.disconectSOMButton()
+        self.dockwidget.plot_som_map.clicked.connect(self.SOM)
+
+    def disableSOMSettings(self):
+        self.dockwidget.som_settings.setEnabled(False)
+        self.dockwidget.plot_som_map.setText("Edit SOM map")
+        self.disconectSOMButton()
+        self.dockwidget.plot_som_map.clicked.connect(self.initSOMSettings)
+
+    def initClusteringSettings(self):
+        self.initElbowBSAS()
+        self.dockwidget.cluster_estimation_method.currentChanged.connect(self.selectEstimatorClusters)
+        try:
+           self.dockwidget.plot_estimation_clusters.clicked.disconnect()
+        except TypeError:
+            pass
+        self.dockwidget.plot_estimation_clusters.clicked.connect(self.plotClusterEstimators)
+        self.enableClusteringSettings()
+        self.disableSOMSettings()
+        self.disableCubeSettings()
+        self.disableGetClustersSettings()
+        self.disableSamplesExtractor()
+
+    def initSilhouette(self):
+        self.dockwidget.k_range_init.setRange(1, 1000)
+        self.dockwidget.k_range_init.setValue(2)
+        self.dockwidget.k_range_end.setRange(1, 1000)
+        self.dockwidget.k_range_end.setValue(20)
+
+    def runSilhouette(self):
+        return silhouette(
+            self.weights,
+            k_range = (self.dockwidget.k_range_init.value(), self.dockwidget.k_range_end.value())
+        )
+
+    def initElbowBSAS(self):
+        self.dockwidget.elbow_steps.setRange(1, 1000)
+        self.dockwidget.elbow_steps.setValue(100)
+        self.dockwidget.elbow_interactions.setRange(1, 1000)
+        self.dockwidget.elbow_interactions.setValue(20)
+        self.dockwidget.elbow_eps.setRange(1, 1000)
+        self.dockwidget.elbow_eps.setValue(1)
+
+    def runElbowBSAS(self):
+        vecTau, vecAgrups = search_clusters_bsas(
+            self.weights,
+            steps = self.dockwidget.elbow_steps.value(),
+            repeticoes = self.dockwidget.elbow_interactions.value()
+        )
+        return elbow(vecTau, vecAgrups, eps = self.dockwidget.elbow_eps.value())
+
+    def selectEstimatorClusters(self):
+        self.initSilhouette()
+        self.initElbowBSAS()
+
+    def plotClusterEstimators(self):
+        index = self.dockwidget.cluster_estimation_method.currentIndex()
+        if index == 0:
+            silhouette_results = self.runSilhouette()
+            plot_silhouette(silhouette_results)
+        elif index == 1:
+            elbow_ = self.runElbowBSAS()
+            plot_elbow(elbow_)
+
+    def estimateClusters(self):
+        self.disableClusteringSettings()
+        index = self.dockwidget.cluster_estimation_method.currentIndex()
+        self.best_k = None
+        if index == 0:
+            silhouette_results = self.runSilhouette()
+            self.best_k = silhouette_results['best_k']
+        elif index == 1:
+            elbow_ = self.runElbowBSAS()
+            self.best_k = int(elbow_['best_k'])
+        self.initGetClustersSettings()
+
+    def disconectClusterEstimatorButton(self):
+        try:
+           self.dockwidget.save_clustering_estimation.clicked.disconnect()
+        except TypeError:
+            pass
+
+    def enableClusteringSettings(self):
+        self.dockwidget.clustering_settings.setEnabled(True)
+        self.dockwidget.plot_estimation_clusters.setEnabled(True)
+        self.dockwidget.save_clustering_estimation.setText("Save Clustering")
+        self.disconectClusterEstimatorButton()
+        self.dockwidget.save_clustering_estimation.clicked.connect(self.estimateClusters)
+
+    def disableClusteringSettings(self):
+        self.dockwidget.clustering_settings.setEnabled(False)
+        self.dockwidget.plot_estimation_clusters.setEnabled(False)
+        self.dockwidget.save_clustering_estimation.setText("Edit Cluster Estimator")
+        self.disconectClusterEstimatorButton()
+        self.dockwidget.save_clustering_estimation.clicked.connect(self.initClusteringSettings)
+
+    def initGetClustersSettings(self):
+        self.dockwidget.clustering_selections.clear()
+        self.dockwidget.clustering_selections.addItems(["K-means", "Hirarquical Clustering"])
+        self.dockwidget.clustering_selections.setCurrentIndex(0)
+        try:
+           self.dockwidget.vectorize_by_clustering_selection.clicked.disconnect()
+        except TypeError:
+            pass
+        self.dockwidget.vectorize_by_clustering_selection.clicked.connect(self.vectorizeByClusteringSelection)
+        self.initSamplesExtractor()
+        self.enableGetClustersSettings()
+        self.enableSamplesExtractor()
+        self.disableClusteringSettings()
+        self.disableSOMSettings()
+        self.disableCubeSettings()
+
+    def plot_som_neurons_colorfy(self, som, labels):
+        rows, cols = som.grid_dimensions
+        label_map = labels.reshape(rows, cols)
+        fig, axes = plt.subplots(rows, cols, figsize=(10, 10))
+        for i in range(rows):
+            for j in range(cols):
+                ax = axes[i, j]
+                # pegar label
+                label = int(label_map[i, j])
+                color = plt.cm.tab10(label / np.max(label_map))
+                # desenhar círculo
+                circle = plt.Circle((0.5, 0.5), 0.4, color=color)
+                ax.add_patch(circle)
+                # opcional: pesos (assinatura espectral)
+                w = som.neurons[i, j].weights.flatten()
+                w = (w - w.min()) / (w.max() - w.min() + 1e-8)
+                ax.plot(np.linspace(0,1,len(w)), w, color="black", linewidth=1)
+                # estética
+                ax.set_xlim(0,1)
+                ax.set_ylim(0,1)
+                ax.set_xticks([])
+                ax.set_yticks([])
+        plt.tight_layout()
+        plt.show()
+
+    def vectorizeByClusteringSelection(self):
+        index = self.dockwidget.clustering_selections.currentIndex()
+        if index == 0:
+            # clusterizar neurônios
+            kmeans = KMeans(n_clusters = self.best_k)
+            self.labels = kmeans.fit_predict(self.weights)
+            label_map = self.labels.reshape(self.som.grid_dimensions)
+        elif index == 1:
+            # escolher número de classes
+            n_classes = self.best_k
+            Z = linkage(self.X, method='ward')
+            self.labels = fcluster(Z, n_classes, criterion='maxclust')
+            plt.figure(figsize=(10,5))
+            dendrogram(Z)
+            plt.title("Dendrograma dos neurônios")
+            label_map = np.zeros(self.som.grid_dimensions)
+        self.plot_som_neurons_colorfy(self.som, label_map)
+        pixel_classes = []
+        for x in self.X:
+            activations = np.zeros(self.som.grid_dimensions)
+            for i in range(self.som.grid_dimensions[0]):
+                for j in range(self.som.grid_dimensions[1]):
+                    activations[i,j] = np.dot(
+                        x.flatten(),
+                        self.som.neurons[i,j].weights.flatten()
+                    )
+            winner = np.argmax(activations)
+            pixel_classes.append(self.labels[winner])
+        pixel_classes = np.array(pixel_classes)
+        height, width = self.stacked.shape[0], self.stacked.shape[1]
+        cluster_map = pixel_classes.reshape(height, width)
+        cluster_da = xr.DataArray(
+            cluster_map,
+            dims=("y", "x"),
+            coords={
+                "y": self.cube["y"],
+                "x": self.cube["x"]
+            }
+        )
+        cluster_da = cluster_da.rio.write_crs(self.cube.rio.crs)
+        transform = cluster_da.rio.transform()
+        shapes_gen = shapes(
+            cluster_da.values.astype("int32"),
+            transform=transform
+        )
+        geoms = []
+        vals = []
+        for geom, value in shapes_gen:
+            geoms.append(shape(geom))
+            vals.append(value)
+        self.gdf = gpd.GeoDataFrame(
+            {"class": [int(val) for val in vals]},
+            geometry=geoms,
+            crs=cluster_da.rio.crs
+        )
+        # Combinar polígonos da mesma classe
+        self.gdf = self.gdf.dissolve(by="class")
+        self.mkdir_cache()
+        project_path = QgsProject.instance().homePath()
+        layer_name = f"{self.cube_file_name}_clusters.shp"
+        output_path = os.path.join(project_path, 'sample_extractor_cache', layer_name)
+        self.gdf = self.gdf.reset_index()
+        self.gdf = self.gdf.set_crs(self.cube.rio.crs)
+        self.gdf = self.gdf.to_crs("EPSG:4326")
+        self.gdf.to_file(output_path)
+        vlayer = QgsVectorLayer(output_path, layer_name, "ogr")
+        if not vlayer.isValid():
+            print("Falha ao carregar a camada vetorial!")
+        else:
+            QgsProject.instance().addMapLayer(vlayer)
+        self.disableGetClustersSettings()
+        self.initSamplesExtractor()
+
+    def enableGetClustersSettings(self):
+        self.dockwidget.get_clusters_settings.setEnabled(True)
+
+    def disableGetClustersSettings(self):
+        self.dockwidget.get_clusters_settings.setEnabled(False)
+
+    def initSamplesExtractor(self):
+        self.dockwidget.samples_rating.setRange(1, 5000)
+        self.dockwidget.samples_rating.setValue(10)
+        try:
+           self.dockwidget.extract_samples.clicked.disconnect()
+        except TypeError:
+            pass
+        self.dockwidget.extract_samples.clicked.connect(self.extractSamples)
+        try:
+           self.dockwidget.export_samples.clicked.disconnect()
+        except TypeError:
+            pass
+        self.dockwidget.export_samples.clicked.connect(self.exportSamples)
+
+    # Seleciona pontos aleatórios dentro dos polígonos de maior extensão
+    def sample_points_in_polygons(self, gdf, n_points_per_polygon = 1, top_n = 1):
+        points = []
+        class_ = []
+        for _, row in gdf.iterrows():
+            geom = row.geometry
+            # se for multipolygon, ele identifica os top_n maiores
+            if isinstance(geom, MultiPolygon):
+                polygons = list(geom.geoms)
+                # ordenar por área (maior → menor)
+                polygons = sorted(polygons, key=lambda p: p.area, reverse=True)
+                # pegar os top N maiores
+                polygons = polygons[:top_n]
+            else:
+                polygons = [geom]
+            # Amostrar aleatóriamente em cada polígono selecionado
+            for poly in polygons:
+                minx, miny, maxx, maxy = poly.bounds
+                count = 0
+                while count < n_points_per_polygon:
+                    x = np.random.uniform(minx, maxx)
+                    y = np.random.uniform(miny, maxy)
+                    p = Point(x, y)
+                    if poly.contains(p):
+                        points.append(p)
+                        class_.append(row['class'])
+                        count += 1
+        return gpd.GeoDataFrame({'class': class_}, geometry=points, crs=gdf.crs)
+
+    def extractSamples(self):
+        self.mkdir_cache()
+        project_path = QgsProject.instance().homePath()
+        layer_name = f"{self.cube_file_name}_samples.shp"
+        output_path = os.path.join(project_path, 'sample_extractor_cache', layer_name)
+        self.samples_selected = self.sample_points_in_polygons(self.gdf, self.dockwidget.samples_rating.value())
+        self.samples_selected.to_file(output_path)
+        vlayer = QgsVectorLayer(output_path, layer_name, "ogr")
+        if not vlayer.isValid():
+            print("Falha ao carregar a camada vetorial!")
+        else:
+            QgsProject.instance().addMapLayer(vlayer)
+        self.disableGetClustersSettings()
+        self.initSamplesExtractor()
+
+    def generate_samples_csv(self, points_gdf):
+        samples = {
+            "sample_id": [],
+            "label": [],
+            "color": [],
+            "longitude": [],
+            "latitude": [],
+            "start_date": [],
+            "end_date": [],
+            "cube": [],
+            "time_series": []
+        }
+        for row in range(0, len(points_gdf)):
+            samples["sample_id"].append(row + 1)
+            class_ = points_gdf['class'][row]
+            samples["label"].append(class_)
+            samples["color"].append("#FFFFFF")
+            samples["longitude"].append(points_gdf.geometry[row].x)
+            samples["latitude"].append(points_gdf.geometry[row].y)
+            samples["start_date"].append(self.count_days(self.date, 190, sub = True))
+            samples["end_date"].append(self.date)
+            samples["cube"].append(self.cube_id)
+            samples["time_series"].append({})
+        return pd.DataFrame(samples).sort_values("sample_id").reset_index(drop=True)
+
+    def exportSamples(self):
+        file_name = QFileDialog.getSaveFileName(
+            parent=self.dlg,
+            caption='Save as csv',
+            directory=f'{self.cube_file_name}_samples.csv',
+            filter='*.csv'
+        )
+        samples_selected_csv = self.generate_samples_csv(self.samples_selected)
+        samples_selected_csv.to_csv(file_name)
+
+    def enableSamplesExtractor(self):
+        self.dockwidget.samples_extraction_settings.setEnabled(True)
+
+    def disableSamplesExtractor(self):
+        self.dockwidget.samples_extraction_settings.setEnabled(False)
+
     def run(self):
         """Run method that loads and starts the plugin"""
 
@@ -226,7 +819,9 @@ class SampleExtractor:
             # connect to provide cleanup on closing of dockwidget
             self.dockwidget.closingPlugin.connect(self.onClosePlugin)
 
+            self.initCubesSettings()
+
             # show the dockwidget
             # TODO: fix to allow choice of dock location
-            self.iface.addDockWidget(Qt.LeftDockWidgetArea, self.dockwidget)
+            self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dockwidget)
             self.dockwidget.show()

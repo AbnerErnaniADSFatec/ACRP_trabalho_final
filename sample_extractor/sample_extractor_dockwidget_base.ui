@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>446</width>
-    <height>752</height>
+    <height>827</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -15,12 +15,12 @@
   </property>
   <widget class="QWidget" name="dockWidgetContents">
    <layout class="QGridLayout" name="gridLayout">
-    <item row="0" column="0">
-     <widget class="QGroupBox" name="groupBox_7">
+    <item row="0" column="1">
+     <widget class="QGroupBox" name="sample_extractor_all">
       <property name="title">
        <string/>
       </property>
-      <widget class="QGroupBox" name="groupBox">
+      <widget class="QGroupBox" name="cube_settings">
        <property name="geometry">
         <rect>
          <x>10</x>
@@ -32,27 +32,17 @@
        <property name="title">
         <string>Select Cube</string>
        </property>
-       <widget class="QComboBox" name="comboBox">
+       <widget class="QComboBox" name="cube_selections">
         <property name="geometry">
          <rect>
           <x>13</x>
           <y>30</y>
-          <width>191</width>
+          <width>281</width>
           <height>27</height>
          </rect>
         </property>
        </widget>
-       <widget class="QComboBox" name="comboBox_3">
-        <property name="geometry">
-         <rect>
-          <x>220</x>
-          <y>30</y>
-          <width>181</width>
-          <height>27</height>
-         </rect>
-        </property>
-       </widget>
-       <widget class="QGroupBox" name="groupBox_3">
+       <widget class="QGroupBox" name="bands_settings">
         <property name="geometry">
          <rect>
           <x>10</x>
@@ -64,54 +54,77 @@
         <property name="title">
          <string>Select Bands</string>
         </property>
-        <widget class="QComboBox" name="comboBox_2">
+        <widget class="QComboBox" name="bands_selections">
          <property name="geometry">
           <rect>
            <x>10</x>
            <y>30</y>
-           <width>331</width>
+           <width>301</width>
            <height>27</height>
           </rect>
          </property>
         </widget>
-        <widget class="QPushButton" name="pushButton">
+        <widget class="QPushButton" name="add_bands">
          <property name="geometry">
           <rect>
-           <x>350</x>
+           <x>320</x>
            <y>30</y>
-           <width>31</width>
+           <width>61</width>
            <height>27</height>
           </rect>
          </property>
          <property name="text">
-          <string>+</string>
+          <string>add</string>
          </property>
         </widget>
-        <widget class="QLineEdit" name="lineEdit">
+        <widget class="QLineEdit" name="selected_bands_view">
          <property name="geometry">
           <rect>
            <x>10</x>
            <y>60</y>
-           <width>371</width>
+           <width>301</width>
            <height>27</height>
           </rect>
          </property>
         </widget>
+        <widget class="QPushButton" name="clear_selected_bands">
+         <property name="geometry">
+          <rect>
+           <x>320</x>
+           <y>60</y>
+           <width>61</width>
+           <height>27</height>
+          </rect>
+         </property>
+         <property name="text">
+          <string>clear</string>
+         </property>
+        </widget>
+       </widget>
+       <widget class="QDateEdit" name="date_selection">
+        <property name="geometry">
+         <rect>
+          <x>300</x>
+          <y>30</y>
+          <width>91</width>
+          <height>31</height>
+         </rect>
+        </property>
        </widget>
       </widget>
-      <widget class="QGroupBox" name="groupBox_4">
+      <widget class="QGroupBox" name="som_settings">
        <property name="geometry">
         <rect>
          <x>10</x>
-         <y>210</y>
+         <y>240</y>
          <width>411</width>
-         <height>141</height>
+         <height>111</height>
         </rect>
        </property>
        <property name="title">
         <string>SOM Grid</string>
        </property>
-       <widget class="QSpinBox" name="spinBox">
+       <widget class="QSpinBox" name="grid_x">
         <property name="geometry">
          <rect>
           <x>40</x>
@@ -121,7 +134,7 @@
          </rect>
         </property>
        </widget>
-       <widget class="QSpinBox" name="spinBox_2">
+       <widget class="QSpinBox" name="grid_y">
         <property name="geometry">
          <rect>
           <x>240</x>
@@ -131,7 +144,7 @@
          </rect>
         </property>
        </widget>
-       <widget class="QSpinBox" name="spinBox_3">
+       <widget class="QSpinBox" name="epochs">
         <property name="geometry">
          <rect>
           <x>70</x>
@@ -141,111 +154,98 @@
          </rect>
         </property>
        </widget>
-       <widget class="QLabel" name="label">
+       <widget class="QLabel" name="epochs_label">
         <property name="geometry">
          <rect>
           <x>10</x>
           <y>70</y>
           <width>66</width>
-          <height>19</height>
+          <height>31</height>
          </rect>
         </property>
         <property name="text">
          <string>epochs =</string>
         </property>
        </widget>
-       <widget class="QLabel" name="label_2">
+       <widget class="QLabel" name="grid_y_label">
         <property name="geometry">
          <rect>
           <x>210</x>
           <y>30</y>
           <width>31</width>
-          <height>19</height>
+          <height>31</height>
          </rect>
         </property>
         <property name="text">
          <string>Y =</string>
         </property>
        </widget>
-       <widget class="QLabel" name="label_3">
+       <widget class="QLabel" name="grid_x_label">
         <property name="geometry">
          <rect>
           <x>10</x>
           <y>30</y>
-          <width>21</width>
-          <height>21</height>
+          <width>31</width>
+          <height>31</height>
          </rect>
         </property>
         <property name="text">
          <string>X =</string>
         </property>
        </widget>
-       <widget class="QLabel" name="label_4">
+       <widget class="QLabel" name="eta_label">
         <property name="geometry">
          <rect>
-          <x>220</x>
+          <x>200</x>
           <y>70</y>
-          <width>101</width>
-          <height>19</height>
+          <width>81</width>
+          <height>31</height>
          </rect>
         </property>
         <property name="text">
          <string>learning rate =</string>
         </property>
        </widget>
-       <widget class="QDoubleSpinBox" name="doubleSpinBox">
+       <widget class="QDoubleSpinBox" name="eta">
         <property name="geometry">
          <rect>
-          <x>330</x>
+          <x>290</x>
           <y>70</y>
-          <width>65</width>
+          <width>101</width>
           <height>28</height>
          </rect>
         </property>
        </widget>
-       <widget class="QPushButton" name="pushButton_2">
-        <property name="geometry">
-         <rect>
-          <x>310</x>
-          <y>110</y>
-          <width>88</width>
-          <height>27</height>
-         </rect>
-        </property>
-        <property name="text">
-         <string>SOM Map</string>
-        </property>
-       </widget>
       </widget>
-      <widget class="QGroupBox" name="groupBox_5">
+      <widget class="QGroupBox" name="clustering_settings">
        <property name="geometry">
         <rect>
          <x>10</x>
-         <y>380</y>
+         <y>420</y>
          <width>411</width>
-         <height>231</height>
+         <height>161</height>
         </rect>
        </property>
        <property name="title">
         <string>Clustering</string>
        </property>
-       <widget class="QTabWidget" name="tabWidget">
+       <widget class="QTabWidget" name="cluster_estimation_method">
         <property name="geometry">
          <rect>
           <x>10</x>
           <y>30</y>
           <width>391</width>
-          <height>131</height>
+          <height>81</height>
          </rect>
         </property>
         <property name="currentIndex">
-         <number>0</number>
+         <number>1</number>
         </property>
-        <widget class="QWidget" name="tab">
+        <widget class="QWidget" name="silhouette">
          <attribute name="title">
           <string>Silhouette</string>
          </attribute>
-         <widget class="QGroupBox" name="groupBox_6">
+         <widget class="QGroupBox" name="k_range_settings">
           <property name="geometry">
            <rect>
             <x>0</x>
@@ -257,208 +257,133 @@
           <property name="title">
            <string>K range</string>
           </property>
-          <widget class="QSpinBox" name="spinBox_5">
+          <widget class="QSpinBox" name="k_range_end">
            <property name="geometry">
             <rect>
-             <x>80</x>
+             <x>190</x>
              <y>20</y>
-             <width>44</width>
+             <width>171</width>
              <height>28</height>
             </rect>
            </property>
           </widget>
-          <widget class="QSpinBox" name="spinBox_4">
+          <widget class="QSpinBox" name="k_range_init">
            <property name="geometry">
             <rect>
-             <x>30</x>
+             <x>10</x>
              <y>20</y>
-             <width>44</width>
+             <width>171</width>
              <height>28</height>
             </rect>
            </property>
           </widget>
-         </widget>
-         <widget class="QPushButton" name="pushButton_7">
-          <property name="geometry">
-           <rect>
-            <x>290</x>
-            <y>60</y>
-            <width>88</width>
-            <height>27</height>
-           </rect>
-          </property>
-          <property name="text">
-           <string>plot</string>
-          </property>
-         </widget>
-         <widget class="QPushButton" name="pushButton_8">
-          <property name="geometry">
-           <rect>
-            <x>190</x>
-            <y>60</y>
-            <width>88</width>
-            <height>27</height>
-           </rect>
-          </property>
-          <property name="text">
-           <string>Estimate</string>
-          </property>
          </widget>
         </widget>
-        <widget class="QWidget" name="tab_2">
+        <widget class="QWidget" name="elbow_settings">
          <attribute name="title">
-          <string>Elbow</string>
+          <string>Elbow BSAS</string>
          </attribute>
-         <widget class="QLabel" name="label_5">
+         <widget class="QLabel" name="elbow_steps_label">
           <property name="geometry">
            <rect>
-            <x>10</x>
+            <x>20</x>
             <y>10</y>
             <width>51</width>
-            <height>21</height>
+            <height>31</height>
            </rect>
           </property>
           <property name="text">
            <string>steps =</string>
           </property>
          </widget>
-         <widget class="QSpinBox" name="spinBox_8">
+         <widget class="QSpinBox" name="elbow_steps">
           <property name="geometry">
            <rect>
-            <x>60</x>
+            <x>70</x>
             <y>10</y>
-            <width>44</width>
+            <width>51</width>
             <height>28</height>
            </rect>
           </property>
          </widget>
-         <widget class="QSpinBox" name="spinBox_9">
+         <widget class="QSpinBox" name="elbow_interactions">
           <property name="geometry">
            <rect>
             <x>210</x>
             <y>10</y>
-            <width>44</width>
+            <width>51</width>
             <height>28</height>
            </rect>
           </property>
          </widget>
-         <widget class="QLabel" name="label_6">
+         <widget class="QLabel" name="elbow_interactions_label">
           <property name="geometry">
            <rect>
-            <x>110</x>
+            <x>130</x>
             <y>10</y>
-            <width>101</width>
-            <height>21</height>
+            <width>81</width>
+            <height>31</height>
            </rect>
           </property>
           <property name="text">
            <string>interactions =</string>
           </property>
          </widget>
-         <widget class="QSpinBox" name="spinBox_10">
+         <widget class="QSpinBox" name="elbow_eps">
           <property name="geometry">
            <rect>
             <x>310</x>
-            <y>20</y>
-            <width>44</width>
+            <y>10</y>
+            <width>51</width>
             <height>28</height>
            </rect>
           </property>
          </widget>
-         <widget class="QLabel" name="label_7">
+         <widget class="QLabel" name="elbow_eps_label">
           <property name="geometry">
            <rect>
-            <x>260</x>
-            <y>20</y>
-            <width>51</width>
-            <height>21</height>
+            <x>270</x>
+            <y>10</y>
+            <width>31</width>
+            <height>31</height>
            </rect>
           </property>
           <property name="text">
            <string>eps =</string>
           </property>
          </widget>
-         <widget class="QPushButton" name="pushButton_3">
-          <property name="geometry">
-           <rect>
-            <x>190</x>
-            <y>60</y>
-            <width>88</width>
-            <height>27</height>
-           </rect>
-          </property>
-          <property name="text">
-           <string>Estimate</string>
-          </property>
-         </widget>
-         <widget class="QPushButton" name="pushButton_4">
-          <property name="geometry">
-           <rect>
-            <x>290</x>
-            <y>60</y>
-            <width>88</width>
-            <height>27</height>
-           </rect>
-          </property>
-          <property name="text">
-           <string>plot</string>
-          </property>
-         </widget>
         </widget>
        </widget>
-       <widget class="QGroupBox" name="groupBox_8">
+       <widget class="QPushButton" name="plot_estimation_clusters">
         <property name="geometry">
          <rect>
-          <x>10</x>
-          <y>160</y>
-          <width>391</width>
-          <height>61</height>
+          <x>70</x>
+          <y>120</y>
+          <width>251</width>
+          <height>27</height>
          </rect>
         </property>
-        <property name="title">
-         <string>Get Clusters</string>
+        <property name="text">
+         <string>plot</string>
         </property>
-        <widget class="QComboBox" name="comboBox_4">
-         <property name="geometry">
-          <rect>
-           <x>10</x>
-           <y>30</y>
-           <width>261</width>
-           <height>27</height>
-          </rect>
-         </property>
-        </widget>
-        <widget class="QPushButton" name="pushButton_5">
-         <property name="geometry">
-          <rect>
-           <x>290</x>
-           <y>30</y>
-           <width>88</width>
-           <height>27</height>
-          </rect>
-         </property>
-         <property name="text">
-          <string>vectorize</string>
-         </property>
-        </widget>
        </widget>
       </widget>
-      <widget class="QGroupBox" name="groupBox_9">
+      <widget class="QGroupBox" name="samples_extraction_settings">
        <property name="geometry">
         <rect>
          <x>10</x>
-         <y>640</y>
-         <width>401</width>
+         <y>710</y>
+         <width>411</width>
          <height>61</height>
         </rect>
        </property>
        <property name="title">
         <string>Extract Samples</string>
        </property>
-       <widget class="QPushButton" name="pushButton_6">
+       <widget class="QPushButton" name="extract_samples">
         <property name="geometry">
          <rect>
-          <x>300</x>
+          <x>220</x>
           <y>30</y>
           <width>88</width>
           <height>27</height>
@@ -468,17 +393,17 @@
          <string>Extract</string>
         </property>
        </widget>
-       <widget class="QSpinBox" name="spinBox_11">
+       <widget class="QSpinBox" name="samples_rating">
         <property name="geometry">
          <rect>
           <x>60</x>
           <y>30</y>
-          <width>221</width>
+          <width>151</width>
           <height>28</height>
          </rect>
         </property>
        </widget>
-       <widget class="QLabel" name="label_8">
+       <widget class="QLabel" name="samples_rating_label">
         <property name="geometry">
          <rect>
           <x>10</x>
@@ -491,6 +416,94 @@
          <string>rate =</string>
         </property>
        </widget>
+       <widget class="QPushButton" name="export_samples">
+        <property name="geometry">
+         <rect>
+          <x>310</x>
+          <y>30</y>
+          <width>88</width>
+          <height>27</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>Export as</string>
+        </property>
+       </widget>
+      </widget>
+      <widget class="QGroupBox" name="get_clusters_settings">
+       <property name="geometry">
+        <rect>
+         <x>10</x>
+         <y>640</y>
+         <width>411</width>
+         <height>61</height>
+        </rect>
+       </property>
+       <property name="title">
+        <string>Get Clusters</string>
+       </property>
+       <widget class="QComboBox" name="clustering_selections">
+        <property name="geometry">
+         <rect>
+          <x>10</x>
+          <y>30</y>
+          <width>291</width>
+          <height>27</height>
+         </rect>
+        </property>
+       </widget>
+       <widget class="QPushButton" name="vectorize_by_clustering_selection">
+        <property name="geometry">
+         <rect>
+          <x>310</x>
+          <y>30</y>
+          <width>88</width>
+          <height>27</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>vectorize</string>
+        </property>
+       </widget>
+      </widget>
+      <widget class="QPushButton" name="save_clustering_estimation">
+       <property name="geometry">
+        <rect>
+         <x>20</x>
+         <y>600</y>
+         <width>381</width>
+         <height>27</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>Save Clustering</string>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="plot_som_map">
+       <property name="geometry">
+        <rect>
+         <x>20</x>
+         <y>360</y>
+         <width>391</width>
+         <height>27</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>SOM Map</string>
+       </property>
+      </widget>
+      <widget class="QPushButton" name="search_crop_image">
+       <property name="geometry">
+        <rect>
+         <x>20</x>
+         <y>180</y>
+         <width>391</width>
+         <height>27</height>
+        </rect>
+       </property>
+       <property name="text">
+        <string>Search Image</string>
+       </property>
       </widget>
      </widget>
     </item>
